@@ -1,3 +1,3 @@
-module github.com/pkg/json
+module github.com/reactive-go/json
 
 go 1.15

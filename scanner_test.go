@@ -1,27 +1,8 @@
 package json
 
 import (
-	"io"
-	"strings"
 	"testing"
 )
-
-type SmallReader struct {
-	r io.Reader
-	n int
-}
-
-func (sm *SmallReader) next() int {
-	sm.n = (sm.n + 3) % 5
-	if sm.n < 1 {
-		sm.n++
-	}
-	return sm.n
-}
-
-func (sm *SmallReader) Read(buf []byte) (int, error) {
-	return sm.r.Read(buf[:min(sm.next(), len(buf))])
-}
 
 func TestScannerNext(t *testing.T) {
 	tests := []struct {
@@ -60,7 +41,7 @@ func TestScannerNext(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
-			scanner := NewScanner(&SmallReader{r: strings.NewReader(tc.in)})
+			scanner := NewScanner([]byte(tc.in))
 			for n, want := range tc.tokens {
 				got := scanner.Next()
 				if string(got) != want {
@@ -70,9 +51,6 @@ func TestScannerNext(t *testing.T) {
 			last := scanner.Next()
 			if len(last) > 0 {
 				t.Fatalf("expected: %q, got: %q", "", string(last))
-			}
-			if err := scanner.Error(); err != io.EOF {
-				t.Fatalf("expected: %v, got: %v", io.EOF, err)
 			}
 		})
 	}
@@ -88,8 +66,7 @@ func TestParseString(t *testing.T) {
 
 func testParseString(t *testing.T, json, want string) {
 	t.Helper()
-	r := strings.NewReader(json)
-	scanner := NewScanner(r)
+	scanner := NewScanner([]byte(json))
 	got := scanner.Next()
 	if string(got) != want {
 		t.Fatalf("expected: %q, got: %q", want, got)
@@ -115,8 +92,7 @@ func TestParseNumber(t *testing.T) {
 
 func testParseNumber(t *testing.T, tc string) {
 	t.Helper()
-	r := strings.NewReader(tc)
-	scanner := NewScanner(r)
+	scanner := NewScanner([]byte(tc))
 	got := scanner.Next()
 	if string(got) != tc {
 		t.Fatalf("expected: %q, got: %q", tc, got)
@@ -139,19 +115,16 @@ func BenchmarkParseNumber(b *testing.B) {
 		`-2.1`,
 		`-1234567.891011121314`,
 	}
-	var buf [4 << 10]byte
 
 	for _, tc := range tests {
-		r := strings.NewReader(tc)
 		b.Run(tc, func(b *testing.B) {
-			b.SetBytes(r.Size())
+			data := []byte(tc)
+			b.SetBytes(int64(len(data)))
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				r.Seek(0, 0)
 				scanner := &Scanner{
 					br: byteReader{
-						data: buf[:0],
-						r:    r,
+						data: data,
 					},
 				}
 				n := scanner.parseNumber(scanner.br.window(0)[0])
@@ -175,14 +148,12 @@ func TestScanner(t *testing.T) {
 
 func testScanner(t *testing.T, sz int) {
 	t.Helper()
-	buf := make([]byte, sz)
 	for _, tc := range inputs {
-		r := fixture(t, tc.path)
+		data := fixture(t, tc.path)
 		t.Run(tc.path, func(t *testing.T) {
 			sc := &Scanner{
 				br: byteReader{
-					data: buf[:0],
-					r:    r,
+					data: data,
 				},
 			}
 			n := 0
@@ -194,11 +165,4 @@ func testScanner(t *testing.T, sz int) {
 			}
 		})
 	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

@@ -1,0 +1,10 @@
+/go.sum
+
+# Editors and IDEs.
+*~
+.editorconfig
+.vscode
+/.idea/
+
+# OSX.
+.DS_Store

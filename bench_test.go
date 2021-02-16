@@ -1,15 +1,10 @@
 package json
 
 import (
-	"bytes"
 	"compress/gzip"
-	"encoding/json"
-	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -33,19 +28,16 @@ var inputs = []struct {
 }
 
 func BenchmarkScanner(b *testing.B) {
-	var buf [8 << 10]byte
 	for _, tc := range inputs {
-		r := fixture(b, tc.path)
+		data := fixture(b, tc.path)
 		b.Run(tc.path, func(b *testing.B) {
 			b.ReportAllocs()
-			b.SetBytes(r.Size())
+			b.SetBytes(int64(len(data)))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				r.Seek(0, 0)
 				sc := &Scanner{
 					br: byteReader{
-						data: buf[:0],
-						r:    r,
+						data: data,
 					},
 				}
 				n := 0
@@ -55,7 +47,6 @@ func BenchmarkScanner(b *testing.B) {
 				if n != tc.alltokens {
 					b.Fatalf("expected %v tokens, got %v", tc.alltokens, n)
 				}
-
 			}
 		})
 	}
@@ -63,195 +54,27 @@ func BenchmarkScanner(b *testing.B) {
 
 func BenchmarkBufferSize(b *testing.B) {
 	b.Skip()
-	sizes := []int{16, 64, 256, 512, 1 << 10, 2 << 10, 4 << 10, 8 << 10, 16 << 10, 64 << 10, 1 << 20}
 	for _, tc := range inputs {
-		r := fixture(b, tc.path)
+		data := fixture(b, tc.path)
 		b.Run(tc.path, func(b *testing.B) {
-			for _, sz := range sizes {
-				buf := make([]byte, sz)
-				b.Run(fmt.Sprint(sz), func(b *testing.B) {
-					b.ReportAllocs()
-					b.SetBytes(r.Size())
-					b.ResetTimer()
-					for i := 0; i < b.N; i++ {
-						r.Seek(0, 0)
-						sc := &Scanner{
-							br: byteReader{
-								data: buf[:0],
-								r:    r,
-							},
-						}
-						for len(sc.Next()) > 0 {
-
-						}
-					}
-				})
-			}
-		})
-	}
-}
-
-func BenchmarkDecoderDecodeInterfaceAny(b *testing.B) {
-	var buf [8 << 10]byte
-	for _, tc := range inputs {
-		r := fixture(b, tc.path)
-		b.Run("pkgjson/"+tc.path, func(b *testing.B) {
 			b.ReportAllocs()
-			b.SetBytes(r.Size())
+			b.SetBytes(int64(len(data)))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				r.Seek(0, 0)
-				dec := NewDecoderBuffer(r, buf[:])
-				var i interface{}
-				err := dec.Decode(&i)
-				check(b, err)
-			}
-		})
-		b.Run("encodingjson/"+tc.path, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(r.Size())
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				r.Seek(0, 0)
-				dec := json.NewDecoder(r)
-				var i interface{}
-				err := dec.Decode(&i)
-				check(b, err)
-			}
-		})
-	}
-}
-
-func BenchmarkDecoderDecodeMapInt(b *testing.B) {
-	var buf [8 << 10]byte
-	in := `{"a": 97, "b": 98, "c": 99, "d": 100, "e": 101, "f": 102, "g": 103 }`
-	r := strings.NewReader(in)
-	b.Run("pkgjson", func(b *testing.B) {
-		b.ReportAllocs()
-		b.SetBytes(r.Size())
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			r.Seek(0, 0)
-			dec := NewDecoderBuffer(r, buf[:])
-			m := make(map[string]int)
-			err := dec.Decode(&m)
-			check(b, err)
-		}
-	})
-	b.Run("encodingjson", func(b *testing.B) {
-		b.ReportAllocs()
-		b.SetBytes(r.Size())
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			r.Seek(0, 0)
-			dec := json.NewDecoder(r)
-			m := make(map[string]int)
-			err := dec.Decode(&m)
-			check(b, err)
-		}
-	})
-}
-
-func BenchmarkDecoderToken(b *testing.B) {
-	var buf [8 << 10]byte
-	for _, tc := range inputs {
-		r := fixture(b, tc.path)
-		b.Run("pkgjson/"+tc.path, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(r.Size())
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				r.Seek(0, 0)
-				dec := NewDecoderBuffer(r, buf[:])
-				n := 0
-				for {
-					_, err := dec.Token()
-					if err == io.EOF {
-						break
-					}
-					check(b, err)
-					n++
+				sc := &Scanner{
+					br: byteReader{
+						data: data,
+					},
 				}
-				if n != tc.tokens {
-					b.Fatalf("expected %v tokens, got %v", tc.tokens, n)
-				}
-			}
-		})
-		b.Run("encodingjson/"+tc.path, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(r.Size())
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				r.Seek(0, 0)
-				dec := json.NewDecoder(r)
-				n := 0
-				for {
-					_, err := dec.Token()
-					if err == io.EOF {
-						break
-					}
-					check(b, err)
-					n++
-				}
-				if n != tc.tokens {
-					b.Fatalf("expected %v tokens, got %v", tc.tokens, n)
+				for len(sc.Next()) > 0 {
 				}
 			}
 		})
 	}
 }
 
-func BenchmarkDecoderNextToken(b *testing.B) {
-	var buf [8 << 10]byte
-	for _, tc := range inputs {
-		r := fixture(b, tc.path)
-		b.Run("pkgjson/"+tc.path, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(r.Size())
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				r.Seek(0, 0)
-				dec := NewDecoderBuffer(r, buf[:])
-				n := 0
-				for {
-					_, err := dec.NextToken()
-					if err == io.EOF {
-						break
-					}
-					check(b, err)
-					n++
-				}
-				if n != tc.tokens {
-					b.Fatalf("expected %v tokens, got %v", tc.tokens, n)
-				}
-			}
-		})
-		b.Run("encodingjson/"+tc.path, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(r.Size())
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				r.Seek(0, 0)
-				dec := json.NewDecoder(r)
-				n := 0
-				for {
-					_, err := dec.Token()
-					if err == io.EOF {
-						break
-					}
-					check(b, err)
-					n++
-				}
-				if n != tc.tokens {
-					b.Fatalf("expected %v tokens, got %v", tc.tokens, n)
-				}
-			}
-		})
-	}
-}
-
-// fuxture returns a *bytes.Reader for the contents of path.
-func fixture(tb testing.TB, path string) *bytes.Reader {
+// fixture returns a *bytes.Reader for the contents of path.
+func fixture(tb testing.TB, path string) []byte {
 	f, err := os.Open(filepath.Join("testdata", path+".json.gz"))
 	check(tb, err)
 	defer f.Close()
@@ -259,7 +82,7 @@ func fixture(tb testing.TB, path string) *bytes.Reader {
 	check(tb, err)
 	buf, err := ioutil.ReadAll(gz)
 	check(tb, err)
-	return bytes.NewReader(buf)
+	return buf
 }
 
 func check(tb testing.TB, err error) {
